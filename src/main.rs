@@ -6,7 +6,7 @@ use bus::Bus;
 use cpu::Cpu;
 
 fn main() {
-    let mut bus = Bus::new("SCPH1000.BIN");
+    let mut bus = Bus::new("SCPH1001.BIN");
     let mut cpu = Cpu::new();
 
     loop {
