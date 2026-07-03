@@ -39,23 +39,31 @@ impl Cpu {
         self.next_reg = (0,0);
 
         match ins.op() {
+            00 => match ins.funct() {
+                00 => self.op_sll(ins),
+                _ => panic!("Unknown special instruction! Funct {}, raw {:#X} at address {:#X}", ins.funct(), ins.0, self.pc),
+            }
             13 => self.op_ori(ins),
             15 => self.op_lui(ins),
             43 => self.op_sw(ins, bus),
-            _ => panic!("Unknown instruction! {:#X} at address {:#X}", ins.0, self.pc),
+            _ => panic!("Unknown instruction! OP {}, raw {:#X} at address {:#X}", ins.op(), ins.0, self.pc),
         }
     }
 
+    fn op_sll(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rt()] << ins.sa())
+    }
+
     fn op_ori(&mut self, ins: Instruction) {
-        self.regs[ins.rt() as usize] = self.regs[ins.rs() as usize] | (ins.imm() as u32)
+        self.set_reg(ins.rt(), self.regs[ins.rs()] | ins.imm_u32());
     }
 
     fn op_lui(&mut self, ins: Instruction) {
-        self.regs[ins.rt() as usize] = (ins.imm() as u32) << 16;
+        self.set_reg(ins.rt(), (ins.imm_u32()) << 16);
     }
 
     fn op_sw(&mut self, ins: Instruction, bus: &mut Bus) {
-        bus.write_u32(self.regs[ins.rs() as usize] + ins.imm_se(), self.regs[ins.rt() as usize]);
+        bus.write_u32(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()]);
     }
 
     fn set_reg(&mut self, i: usize, val: u32) {
@@ -71,16 +79,16 @@ impl Instruction {
     fn op(&self) -> u8 {
         (self.0 >> 26) as u8
     }
-    fn rs(&self) -> u8 {
-        ((self.0 >> 21) & 0x1F) as u8
+    fn rs(&self) -> usize {
+        ((self.0 >> 21) & 0x1F) as usize
     }
-    fn rt(&self) -> u8 {
-        ((self.0 >> 16) & 0x1F) as u8
+    fn rt(&self) -> usize {
+        ((self.0 >> 16) & 0x1F) as usize
     }
-    fn rd(&self) -> u8 {
-        ((self.0 >> 11) & 0x1F) as u8
+    fn rd(&self) -> usize {
+        ((self.0 >> 11) & 0x1F) as usize
     }
-    fn shamt(&self) -> u8 {
+    fn sa(&self) -> u8 {
         ((self.0 >> 6) & 0x1F) as u8
     }
     fn funct(&self) -> u8 {
@@ -88,6 +96,9 @@ impl Instruction {
     }
     fn imm(&self) -> u16 {
         (self.0 & 0xFFFF) as u16
+    }
+    fn imm_u32(&self) -> u32 {
+        (self.0 & 0xFFFF) as u32
     }
     pub fn imm_se(&self) -> u32 {
         (self.0 & 0xFFFF) as i16 as i32 as u32
