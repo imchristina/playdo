@@ -18,6 +18,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Rom(offset) => self.rom.read_u32(offset),
             BusTarget::Io(raw) => self.read_io_u32(raw),
+            BusTarget::CacheCtrl => self.cache_ctrl_read_stub(),
             BusTarget::Invalid(raw) => panic!("Invalid memory access! 0x{:X}", raw),
 
         }
@@ -27,6 +28,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Rom(offset) => self.rom.read_u16(offset),
             BusTarget::Io(raw) => self.read_io_u16(raw),
+            BusTarget::CacheCtrl => self.cache_ctrl_read_stub() as u16,
             BusTarget::Invalid(raw) => panic!("Invalid memory access! 0x{:X}", raw),
         }
     }
@@ -35,6 +37,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
             BusTarget::Io(raw) => self.write_io_u32(raw, data),
+            BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data),
             BusTarget::Invalid(raw) => panic!("Invalid memory access! 0x{:X}", raw),
         }
     }
@@ -43,6 +46,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
             BusTarget::Io(raw) => self.write_io_u16(raw, data),
+            BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data as u32),
             BusTarget::Invalid(raw) => panic!("Invalid memory access! 0x{:X}", raw),
         }
     }
@@ -77,11 +81,22 @@ impl Bus {
         }
     }
 
+    pub fn cache_ctrl_read_stub(&self) -> u32 {
+        println!("Unhandled cache control read");
+        0
+    }
+
+    pub fn cache_ctrl_write_stub(&self, data: u32) {
+        println!("Unhandled cache control write: {:#X}", data);
+    }
+
     fn decode_address(&self, addr: u32) -> BusTarget {
         if (addr >= ROM_ADDR) && (addr <= ROM_ADDR + ROM_SIZE) {
             BusTarget::Rom(addr - ROM_ADDR)
         } else if (addr >= 0x1F801000) && (addr <= 0x1FC00000) {
             BusTarget::Io(addr)
+        } else if (addr == 0xFFFE0130) {
+            BusTarget::CacheCtrl
         } else {
             BusTarget::Invalid(addr)
         }
@@ -91,5 +106,6 @@ impl Bus {
 enum BusTarget {
     Rom(u32),
     Io(u32),
+    CacheCtrl,
     Invalid(u32),
 }

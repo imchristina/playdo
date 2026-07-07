@@ -26,9 +26,11 @@ impl Cpu {
     pub fn step(&mut self, bus: &mut Bus) {
         let ins = Instruction(bus.read_u32(self.pc));
 
+        let pc_debug = self.pc; // Store PC before delay slot is active
+
         self.execute(ins, bus);
 
-        println!("Ins: {}, PC: {:#X}, Regs:{:X?} HI: {:#X}, LO: {:#X}", ins.op(), self.pc, self.regs, self.hi, self.lo);
+        println!("Ins: {}, PC: {:#X}, Regs:{:X?} HI: {:#X}, LO: {:#X}", ins.op(), pc_debug, self.regs, self.hi, self.lo);
     }
 
     pub fn execute(&mut self, ins: Instruction, bus: &mut Bus) {
@@ -41,8 +43,11 @@ impl Cpu {
         match ins.op() {
             00 => match ins.funct() {
                 00 => self.op_sll(ins),
+                37 => self.op_or(ins),
                 _ => panic!("Unknown special instruction! Funct {}, raw {:#X} at address {:#X}", ins.funct(), ins.0, self.pc),
             }
+            02 => self.op_j(ins),
+            09 => self.op_addiu(ins),
             13 => self.op_ori(ins),
             15 => self.op_lui(ins),
             43 => self.op_sw(ins, bus),
@@ -51,7 +56,19 @@ impl Cpu {
     }
 
     fn op_sll(&mut self, ins: Instruction) {
-        self.set_reg(ins.rd(), self.regs[ins.rt()] << ins.sa())
+        self.set_reg(ins.rd(), self.regs[ins.rt()] << ins.sa());
+    }
+
+    fn op_or(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rs()] | self.regs[ins.rt()])
+    }
+
+    fn op_j(&mut self, ins: Instruction) {
+        self.next_pc = (self.next_pc & 0xFC000000) | ins.target() << 2;
+    }
+
+    fn op_addiu(&mut self, ins: Instruction) {
+        self.set_reg(ins.rt(), ins.imm_se() + self.regs[ins.rs()]);
     }
 
     fn op_ori(&mut self, ins: Instruction) {
@@ -98,9 +115,12 @@ impl Instruction {
         (self.0 & 0xFFFF) as u16
     }
     fn imm_u32(&self) -> u32 {
-        (self.0 & 0xFFFF) as u32
+        (self.0 & 0xFFFF)
     }
-    pub fn imm_se(&self) -> u32 {
+    fn imm_se(&self) -> u32 {
         (self.0 & 0xFFFF) as i16 as i32 as u32
+    }
+    fn target(&self) -> u32 {
+        (self.0 & 0x3ffffff)
     }
 }
