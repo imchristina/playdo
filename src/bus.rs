@@ -1,21 +1,25 @@
+use crate::ram::*;
 use crate::rom::*;
 
 pub const ROM_ADDR: u32 = 0xBFC00000;
 
 // Bus-slave devices are owned by the bus struct
 pub struct Bus {
-    rom: Rom
+    ram: Ram,
+    rom: Rom,
 }
 
 impl Bus {
     pub fn new(rom_path: &str) -> Self {
         Self {
+            ram: Ram::new(),
             rom: Rom::from_file(rom_path).expect("Rom file not found!"),
         }
     }
 
     pub fn read_u32(&self, addr: u32) -> u32 {
         match self.decode_address(addr) {
+            BusTarget::Ram(raw) => self.ram.read_u32(raw),
             BusTarget::Rom(offset) => self.rom.read_u32(offset),
             BusTarget::Io(raw) => self.read_io_u32(raw),
             BusTarget::CacheCtrl => self.cache_ctrl_read_stub(),
@@ -26,6 +30,7 @@ impl Bus {
 
     pub fn read_u16(&self, addr: u32) -> u16 {
         match self.decode_address(addr) {
+            BusTarget::Ram(raw) => self.ram.read_u16(raw),
             BusTarget::Rom(offset) => self.rom.read_u16(offset),
             BusTarget::Io(raw) => self.read_io_u16(raw),
             BusTarget::CacheCtrl => self.cache_ctrl_read_stub() as u16,
@@ -33,8 +38,9 @@ impl Bus {
         }
     }
 
-    pub fn write_u32(&self, addr: u32, data: u32) {
+    pub fn write_u32(&mut self, addr: u32, data: u32) {
         match self.decode_address(addr) {
+            BusTarget::Ram(raw) => self.ram.write_u32(raw, data),
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
             BusTarget::Io(raw) => self.write_io_u32(raw, data),
             BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data),
@@ -42,8 +48,9 @@ impl Bus {
         }
     }
 
-    pub fn write_u16(&self, addr: u32, data: u16) {
+    pub fn write_u16(&mut self, addr: u32, data: u16) {
         match self.decode_address(addr) {
+            BusTarget::Ram(raw) => self.ram.write_u16(raw, data),
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
             BusTarget::Io(raw) => self.write_io_u16(raw, data),
             BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data as u32),
@@ -91,9 +98,11 @@ impl Bus {
     }
 
     fn decode_address(&self, addr: u32) -> BusTarget {
-        if (addr >= ROM_ADDR) && (addr <= ROM_ADDR + ROM_SIZE) {
+        if (addr < RAM_SIZE) {
+            BusTarget::Ram(addr)
+        } else if (addr >= ROM_ADDR) && (addr < ROM_ADDR + ROM_SIZE) {
             BusTarget::Rom(addr - ROM_ADDR)
-        } else if (addr >= 0x1F801000) && (addr <= 0x1FC00000) {
+        } else if (addr >= 0x1F801000) && (addr < 0x1F803FFF) {
             BusTarget::Io(addr)
         } else if (addr == 0xFFFE0130) {
             BusTarget::CacheCtrl
@@ -104,6 +113,7 @@ impl Bus {
 }
 
 enum BusTarget {
+    Ram(u32),
     Rom(u32),
     Io(u32),
     CacheCtrl,

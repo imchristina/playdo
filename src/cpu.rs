@@ -8,6 +8,8 @@ pub struct Cpu {
 
     next_pc: u32, // Branch delay slot
     next_reg: (usize, u32), // Load delay slot
+
+    cop0_regs: [u32; 32],
 }
 
 impl Cpu {
@@ -20,6 +22,8 @@ impl Cpu {
 
             next_pc: ROM_ADDR + 4,
             next_reg: (0, 0),
+
+            cop0_regs: [0; 32],
         }
     }
 
@@ -44,14 +48,19 @@ impl Cpu {
             00 => match ins.funct() {
                 00 => self.op_sll(ins),
                 37 => self.op_or(ins),
-                _ => panic!("Unknown special instruction! Funct {}, raw {:#X} at address {:#X}", ins.funct(), ins.0, self.pc),
+                _ => panic!("Unknown special instruction! Funct {}, raw {:#b} at address {:#X}", ins.funct(), ins.0, self.pc),
             }
             02 => self.op_j(ins),
+            05 => self.op_bne(ins),
             09 => self.op_addiu(ins),
             13 => self.op_ori(ins),
             15 => self.op_lui(ins),
+            16 => match ins.rs() {
+                0b00100 => self.cop0_mtc(ins),
+                _ => panic!("Unknown COP0 instruction! OP (RS) {}, raw {:#b} at address {:#X}", ins.rs(), ins.0, self.pc)
+            }
             43 => self.op_sw(ins, bus),
-            _ => panic!("Unknown instruction! OP {}, raw {:#X} at address {:#X}", ins.op(), ins.0, self.pc),
+            _ => panic!("Unknown instruction! OP {}, raw {:#b} at address {:#X}", ins.op(), ins.0, self.pc),
         }
     }
 
@@ -64,7 +73,11 @@ impl Cpu {
     }
 
     fn op_j(&mut self, ins: Instruction) {
-        self.next_pc = (self.next_pc & 0xFC000000) | ins.target() << 2;
+        self.next_pc = (self.next_pc & 0xF0000000) | ins.target() << 2;
+    }
+
+    fn op_bne(&mut self, ins: instruction) {
+        self.
     }
 
     fn op_addiu(&mut self, ins: Instruction) {
@@ -81,6 +94,10 @@ impl Cpu {
 
     fn op_sw(&mut self, ins: Instruction, bus: &mut Bus) {
         bus.write_u32(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()]);
+    }
+
+    fn cop0_mtc(&mut self, ins: Instruction) {
+        self.cop0_regs[ins.rd()] = self.regs[ins.rt()];
     }
 
     fn set_reg(&mut self, i: usize, val: u32) {
