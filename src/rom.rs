@@ -28,4 +28,9 @@ impl Rom {
         let bytes: [u8; 2] = self.data[idx..idx + 2].try_into().unwrap();
         u16::from_le_bytes(bytes)
     }
+
+    pub fn read_u8(&self, offset: u32) -> u8 {
+        let idx = offset as usize;
+        self.data[idx]
+    }
 }

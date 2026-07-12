@@ -23,6 +23,11 @@ impl Ram {
         u16::from_le_bytes(bytes)
     }
 
+    pub fn read_u8(&self, offset: u32) -> u8 {
+        let idx = offset as usize;
+        self.data[idx]
+    }
+
     pub fn write_u32(&mut self, offset: u32, data: u32) {
         let idx = offset as usize;
         let bytes = data.to_le_bytes();
@@ -33,5 +38,10 @@ impl Ram {
         let idx = offset as usize;
         let bytes = data.to_le_bytes();
         self.data[idx..idx + 2].copy_from_slice(&bytes);
+    }
+
+    pub fn write_u8(&mut self, offset: u32, data: u8) {
+        let idx = offset as usize;
+        self.data[idx] = data;
     }
 }
