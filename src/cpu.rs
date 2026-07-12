@@ -2,6 +2,21 @@ use crate::bus::*;
 
 pub const ENTRY_POINT: u32 = 0xBFC00000;
 
+const COP0_REG_SR: usize = 12;
+
+const COP0_SR_IEC: u32 = 1 << 0;
+const COP0_SR_KUC: u32 = 1 << 1;
+const COP0_SR_IEP: u32 = 1 << 2;
+const COP0_SR_KUP: u32 = 1 << 3;
+const COP0_SR_IEO: u32 = 1 << 4;
+const COP0_SR_KUO: u32 = 1 << 5;
+const COP0_SR_CUR_SHIFT: u32 = 0;
+const COP0_SR_CUR_MASK: u32 = 3 << COP0_SR_CUR_SHIFT;
+const COP0_SR_PREV_SHIFT: u32 = 2;
+const COP0_SR_PREV_MASK: u32 = 3 << COP0_SR_PREV_SHIFT;
+const COP0_SR_OLD_SHIFT: u32 = 4;
+const COP0_SR_OLD_MASK: u32 = 3 << COP0_SR_OLD_SHIFT;
+
 pub struct Cpu {
     regs: [u32; 32],
     pc: u32,
@@ -71,7 +86,7 @@ impl Cpu {
             16 => match ins.rs() {
                 0b00000 => self.cop0_op_mfc(ins),
                 0b00100 => self.cop0_op_mtc(ins),
-                0b10000 => self.cop0_op_rfe(ins),
+                0b10000 => self.cop0_op_rfe(),
                 _ => panic!("Unknown COP0 instruction! OP (RS) {}, raw {:#b} at address {:#X}", ins.rs(), ins.0, self.pc)
             }
             32 => self.op_lb(ins, bus),
@@ -185,8 +200,15 @@ impl Cpu {
         self.cop0_regs[ins.rd()] = self.regs[ins.rt()];
     }
 
-    fn cop0_op_rfe(&mut self, ins: Instruction) {
-        // Stub
+    fn cop0_op_rfe(&mut self) {
+        let sr = self.cop0_regs[COP0_REG_SR];
+        let prev = (sr & COP0_SR_PREV_MASK) >> COP0_SR_PREV_SHIFT;
+        let old = (sr & COP0_SR_OLD_MASK) >> COP0_SR_OLD_SHIFT;
+
+        let mut new_sr = sr & !(COP0_SR_CUR_MASK | COP0_SR_PREV_MASK);
+        new_sr |= prev | old;
+
+        self.cop0_regs[COP0_REG_SR] = new_sr;
     }
 
     fn set_reg(&mut self, i: usize, val: u32) {
