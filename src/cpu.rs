@@ -3,6 +3,8 @@ use crate::bus::*;
 pub const ENTRY_POINT: u32 = 0xBFC00000;
 
 const COP0_REG_SR: usize = 12;
+const COP0_REG_CAUSE: usize = 13;
+const COP0_REG_EPC: usize = 14;
 
 const COP0_SR_IEC: u32 = 1 << 0;
 const COP0_SR_KUC: u32 = 1 << 1;
@@ -10,6 +12,8 @@ const COP0_SR_IEP: u32 = 1 << 2;
 const COP0_SR_KUP: u32 = 1 << 3;
 const COP0_SR_IEO: u32 = 1 << 4;
 const COP0_SR_KUO: u32 = 1 << 5;
+const COP0_SR_ISC: u32 = 1 << 16;
+
 const COP0_SR_CUR_SHIFT: u32 = 0;
 const COP0_SR_CUR_MASK: u32 = 3 << COP0_SR_CUR_SHIFT;
 const COP0_SR_PREV_SHIFT: u32 = 2;
@@ -65,21 +69,38 @@ impl Cpu {
         match ins.op() {
             00 => match ins.funct() {
                 00 => self.op_sll(ins),
+                02 => self.op_srl(ins),
+                03 => self.op_sra(ins),
                 08 => self.op_jr(ins),
                 09 => self.op_jalr(ins),
+                16 => self.op_mfhi(ins),
+                18 => self.op_mflo(ins),
+                26 => self.op_div(ins),
+                27 => self.op_divu(ins),
                 32 => self.op_add(ins),
                 33 => self.op_addu(ins),
+                35 => self.op_subu(ins),
                 36 => self.op_and(ins),
                 37 => self.op_or(ins),
+                42 => self.op_slt(ins),
                 43 => self.op_sltu(ins),
                 _ => panic!("Unknown special instruction! Funct {}, raw {:#b} at address {:#X}", ins.funct(), ins.0, self.pc),
+            }
+            01 => match ins.rt() {
+                00 => self.op_bltz(ins),
+                01 => self.op_bgez(ins),
+                _ => panic!("Unknown branch instruction! RT {}, raw {:#b} at address {:#X}", ins.rt(), ins.0, self.pc),
             }
             02 => self.op_j(ins),
             03 => self.op_jal(ins),
             04 => self.op_beq(ins),
             05 => self.op_bne(ins),
+            06 => self.op_blez(ins),
+            07 => self.op_bgtz(ins),
             08 => self.op_addi(ins),
             09 => self.op_addiu(ins),
+            10 => self.op_slti(ins),
+            11 => self.op_sltiu(ins),
             12 => self.op_andi(ins),
             13 => self.op_ori(ins),
             15 => self.op_lui(ins),
@@ -91,6 +112,7 @@ impl Cpu {
             }
             32 => self.op_lb(ins, bus),
             35 => self.op_lw(ins, bus),
+            36 => self.op_lbu(ins, bus),
             40 => self.op_sb(ins, bus),
             41 => self.op_sh(ins, bus),
             43 => self.op_sw(ins, bus),
@@ -102,6 +124,14 @@ impl Cpu {
         self.set_reg(ins.rd(), self.regs[ins.rt()] << ins.sa());
     }
 
+    fn op_srl(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rt()] >> ins.sa());
+    }
+
+    fn op_sra(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), (self.regs[ins.rt()] as i32 >> ins.sa()) as u32);
+    }
+
     fn op_jr(&mut self, ins: Instruction) {
         self.branch_delay = self.regs[ins.rs()];
     }
@@ -109,6 +139,24 @@ impl Cpu {
     fn op_jalr(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.branch_delay);
         self.branch_delay = self.regs[ins.rs()];
+    }
+
+    fn op_mfhi(&mut self, ins: Instruction) {
+        self.regs[ins.rd()] = self.hi;
+    }
+
+    fn op_mflo(&mut self, ins: Instruction) {
+        self.regs[ins.rd()] = self.lo;
+    }
+
+    fn op_div(&mut self, ins: Instruction) {
+        self.lo = (self.regs[ins.rs()] as i32 / self.regs[ins.rt()] as i32) as u32;
+        self.hi = (self.regs[ins.rs()] as i32 % self.regs[ins.rt()] as i32) as u32;
+    }
+
+    fn op_divu(&mut self, ins: Instruction) {
+        self.lo = self.regs[ins.rs()] / self.regs[ins.rt()];
+        self.hi = self.regs[ins.rs()] % self.regs[ins.rt()];
     }
 
     fn op_add(&mut self, ins: Instruction) { // TODO overflow trap
@@ -119,6 +167,10 @@ impl Cpu {
         self.set_reg(ins.rd(), self.regs[ins.rs()] + self.regs[ins.rt()]);
     }
 
+    fn op_subu(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rs()] - self.regs[ins.rt()]);
+    }
+
     fn op_and(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rs()] & self.regs[ins.rt()]);
     }
@@ -127,8 +179,24 @@ impl Cpu {
         self.set_reg(ins.rd(), self.regs[ins.rs()] | self.regs[ins.rt()]);
     }
 
+    fn op_slt(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), ((self.regs[ins.rs()] as i32) < (self.regs[ins.rt()] as i32)) as u32);
+    }
+
     fn op_sltu(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), (self.regs[ins.rs()] < self.regs[ins.rt()]) as u32);
+    }
+
+    fn op_bltz(&mut self, ins: Instruction) {
+        if (self.regs[ins.rs()] & (1 << 31)) != 0 {
+            self.branch_delay = self.pc + (ins.imm_se() << 2);
+        }
+    }
+
+    fn op_bgez(&mut self, ins: Instruction) {
+        if (self.regs[ins.rs()] & (1 << 31)) == 0 {
+            self.branch_delay = self.pc + (ins.imm_se() << 2);
+        }
     }
 
     fn op_j(&mut self, ins: Instruction) {
@@ -146,6 +214,18 @@ impl Cpu {
         }
     }
 
+    fn op_blez(&mut self, ins: Instruction) {
+        if (self.regs[ins.rs()] as i32) <= 0 {
+            self.branch_delay = self.pc + (ins.imm_se() << 2);
+        }
+    }
+
+    fn op_bgtz(&mut self, ins: Instruction) {
+        if (self.regs[ins.rs()] as i32) > 0 {
+            self.branch_delay = self.pc + (ins.imm_se() << 2);
+        }
+    }
+
     fn op_bne(&mut self, ins: Instruction) {
         if self.regs[ins.rs()] != self.regs[ins.rt()] {
             self.branch_delay = self.pc + (ins.imm_se() << 2);
@@ -158,6 +238,14 @@ impl Cpu {
 
     fn op_addiu(&mut self, ins: Instruction) {
         self.set_reg(ins.rt(), ins.imm_se() + self.regs[ins.rs()]);
+    }
+
+    fn op_slti(&mut self, ins: Instruction) {
+        self.set_reg(ins.rt(), ((self.regs[ins.rs()] as i32) < (ins.imm_se() as i32)) as u32);
+    }
+
+    fn op_sltiu(&mut self, ins: Instruction) {
+        self.set_reg(ins.rt(), (self.regs[ins.rs()] < ins.imm_u32()) as u32);
     }
 
     fn op_andi(&mut self, ins: Instruction) {
@@ -180,16 +268,26 @@ impl Cpu {
         self.set_reg_delay(ins.rt(), bus.read_u32(self.regs[ins.rs()] + ins.imm_se()));
     }
 
+    fn op_lbu(&mut self, ins: Instruction, bus: &mut Bus) {
+        self.set_reg_delay(ins.rt(), bus.read_u8(self.regs[ins.rs()] + ins.imm_se()) as u32);
+    }
+
     fn op_sb(&mut self, ins: Instruction, bus: &mut Bus) {
-        bus.write_u8(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()] as u8);
+        if (self.cop0_regs[COP0_REG_SR] & COP0_SR_ISC) == 0 {
+            bus.write_u8(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()] as u8);
+        }
     }
 
     fn op_sh(&mut self, ins: Instruction, bus: &mut Bus) {
-        bus.write_u16(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()] as u16);
+        if (self.cop0_regs[COP0_REG_SR] & COP0_SR_ISC) == 0 {
+            bus.write_u16(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()] as u16);
+        }
     }
 
     fn op_sw(&mut self, ins: Instruction, bus: &mut Bus) {
-        bus.write_u32(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()]);
+        if (self.cop0_regs[COP0_REG_SR] & COP0_SR_ISC) == 0 {
+            bus.write_u32(self.regs[ins.rs()] + ins.imm_se(), self.regs[ins.rt()]);
+        }
     }
 
     fn cop0_op_mfc(&mut self, ins: Instruction) {
@@ -206,7 +304,7 @@ impl Cpu {
         let old = (sr & COP0_SR_OLD_MASK) >> COP0_SR_OLD_SHIFT;
 
         let mut new_sr = sr & !(COP0_SR_CUR_MASK | COP0_SR_PREV_MASK);
-        new_sr |= prev | old;
+        new_sr |= prev | (old << COP0_SR_PREV_SHIFT);
 
         self.cop0_regs[COP0_REG_SR] = new_sr;
     }
@@ -219,6 +317,10 @@ impl Cpu {
     fn set_reg_delay(&mut self, i: usize, val: u32) {
         self.load_delay[0].addr = i;
         self.load_delay[0].data = val;
+    }
+
+    fn exception(&mut self) {
+
     }
 }
 

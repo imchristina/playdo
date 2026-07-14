@@ -1,4 +1,3 @@
-use crate::bus::BusTarget::Uart;
 use crate::ram::*;
 use crate::rom::*;
 
