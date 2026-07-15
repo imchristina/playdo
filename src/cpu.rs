@@ -79,6 +79,7 @@ impl Cpu {
                 02 => self.op_srl(ins),
                 03 => self.op_sra(ins),
                 04 => self.op_sllv(ins),
+                06 => self.op_srlv(ins),
                 08 => self.op_jr(ins),
                 09 => self.op_jalr(ins),
                 12 => self.op_syscall(),
@@ -90,6 +91,7 @@ impl Cpu {
                 27 => self.op_divu(ins),
                 32 => self.op_add(ins),
                 33 => self.op_addu(ins),
+                34 => self.op_sub(ins),
                 35 => self.op_subu(ins),
                 36 => self.op_and(ins),
                 37 => self.op_or(ins),
@@ -150,6 +152,10 @@ impl Cpu {
         self.set_reg(ins.rd(), self.regs[ins.rt()] << self.regs[ins.rs()]);
     }
 
+    fn op_srlv(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rt()] >> self.regs[ins.rs()]);
+    }
+
     fn op_jr(&mut self, ins: Instruction) {
         self.branch_delay = self.regs[ins.rs()];
     }
@@ -195,6 +201,10 @@ impl Cpu {
 
     fn op_addu(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rs()] + self.regs[ins.rt()]);
+    }
+
+    fn op_sub(&mut self, ins: Instruction) { // TODO overflow trap
+        self.set_reg(ins.rd(), self.regs[ins.rs()] - self.regs[ins.rt()]);
     }
 
     fn op_subu(&mut self, ins: Instruction) {
