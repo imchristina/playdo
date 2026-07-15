@@ -1,10 +1,12 @@
 use crate::bus::*;
 
-pub const ENTRY_POINT: u32 = 0xBFC00000;
+pub const ENTRY_POINT:          u32 = 0xBFC00000;
+pub const EXCEPTION_VECTOR:      u32 = 0x80000080;
+pub const EXCEPTION_VECTOR_ALT:  u32 = 0xBFC00180;
 
-const COP0_REG_SR: usize = 12;
-const COP0_REG_CAUSE: usize = 13;
-const COP0_REG_EPC: usize = 14;
+const COP0_REG_SR:      usize = 12;
+const COP0_REG_CAUSE:   usize = 13;
+const COP0_REG_EPC:     usize = 14;
 
 const COP0_SR_IEC: u32 = 1 << 0;
 const COP0_SR_KUC: u32 = 1 << 1;
@@ -13,13 +15,13 @@ const COP0_SR_KUP: u32 = 1 << 3;
 const COP0_SR_IEO: u32 = 1 << 4;
 const COP0_SR_KUO: u32 = 1 << 5;
 const COP0_SR_ISC: u32 = 1 << 16;
+const COP0_SR_BEV: u32 = 1 << 22;
 
-const COP0_SR_CUR_SHIFT: u32 = 0;
-const COP0_SR_CUR_MASK: u32 = 3 << COP0_SR_CUR_SHIFT;
-const COP0_SR_PREV_SHIFT: u32 = 2;
-const COP0_SR_PREV_MASK: u32 = 3 << COP0_SR_PREV_SHIFT;
-const COP0_SR_OLD_SHIFT: u32 = 4;
-const COP0_SR_OLD_MASK: u32 = 3 << COP0_SR_OLD_SHIFT;
+const COP0_CAUSE_EXECCODE_SHIFT: u32 = 2;
+const COP0_CAUSE_EXECCODE_MASK:  u32 = 0b11111 << COP0_CAUSE_EXECCODE_SHIFT;
+const COP0_CAUSE_BD:             u32 = 1 << 31;
+
+const COP0_EXECCODE_SYSCALL: u32 = 8;
 
 pub struct Cpu {
     regs: [u32; 32],
@@ -29,6 +31,7 @@ pub struct Cpu {
 
     branch_delay: u32, // Branch delay slot
     load_delay: [RegWrite; 2], // Load delay slot, last member is oldest/to be commited
+    pc_ins: u32, // PC of the currently executing instruction, for exceptions
 
     cop0_regs: [u32; 32],
 }
@@ -43,6 +46,7 @@ impl Cpu {
 
             branch_delay: ENTRY_POINT + 4,
             load_delay: [RegWrite::default(); 2],
+            pc_ins: ENTRY_POINT,
 
             cop0_regs: [0; 32],
         }
@@ -51,14 +55,17 @@ impl Cpu {
     pub fn step(&mut self, bus: &mut Bus) {
         let ins = Instruction(bus.read_u32(self.pc));
 
-        let pc_debug = self.pc; // Store PC before delay slot is active
+        //let pc_debug = self.pc; // Store PC before delay slot is active
 
         self.execute(ins, bus);
 
-        println!("OP: {}, PC: {:#X}, Regs:{:X?} HI: {:#X}, LO: {:#X}", ins.op(), pc_debug, self.regs, self.hi, self.lo);
+        //println!("OP: {}, PC: {:#X}, Regs:{:X?} HI: {:#X}, LO: {:#X}", ins.op(), pc_debug, self.regs, self.hi, self.lo);
     }
 
     pub fn execute(&mut self, ins: Instruction, bus: &mut Bus) {
+        self.stdio_hook();
+
+        self.pc_ins = self.pc;
         self.pc = self.branch_delay;
         self.branch_delay = self.pc + 4; // Default, branching instructions will overwrite
 
@@ -71,10 +78,14 @@ impl Cpu {
                 00 => self.op_sll(ins),
                 02 => self.op_srl(ins),
                 03 => self.op_sra(ins),
+                04 => self.op_sllv(ins),
                 08 => self.op_jr(ins),
                 09 => self.op_jalr(ins),
+                12 => self.op_syscall(),
                 16 => self.op_mfhi(ins),
                 18 => self.op_mflo(ins),
+                17 => self.op_mthi(ins),
+                19 => self.op_mtlo(ins),
                 26 => self.op_div(ins),
                 27 => self.op_divu(ins),
                 32 => self.op_add(ins),
@@ -82,6 +93,7 @@ impl Cpu {
                 35 => self.op_subu(ins),
                 36 => self.op_and(ins),
                 37 => self.op_or(ins),
+                39 => self.op_nor(ins),
                 42 => self.op_slt(ins),
                 43 => self.op_sltu(ins),
                 _ => panic!("Unknown special instruction! Funct {}, raw {:#b} at address {:#X}", ins.funct(), ins.0, self.pc),
@@ -111,8 +123,10 @@ impl Cpu {
                 _ => panic!("Unknown COP0 instruction! OP (RS) {}, raw {:#b} at address {:#X}", ins.rs(), ins.0, self.pc)
             }
             32 => self.op_lb(ins, bus),
+            33 => self.op_lh(ins, bus),
             35 => self.op_lw(ins, bus),
             36 => self.op_lbu(ins, bus),
+            37 => self.op_lhu(ins, bus),
             40 => self.op_sb(ins, bus),
             41 => self.op_sh(ins, bus),
             43 => self.op_sw(ins, bus),
@@ -132,6 +146,10 @@ impl Cpu {
         self.set_reg(ins.rd(), (self.regs[ins.rt()] as i32 >> ins.sa()) as u32);
     }
 
+    fn op_sllv(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rt()] << self.regs[ins.rs()]);
+    }
+
     fn op_jr(&mut self, ins: Instruction) {
         self.branch_delay = self.regs[ins.rs()];
     }
@@ -141,12 +159,24 @@ impl Cpu {
         self.branch_delay = self.regs[ins.rs()];
     }
 
+    fn op_syscall(&mut self) {
+        self.exception(COP0_EXECCODE_SYSCALL);
+    }
+
     fn op_mfhi(&mut self, ins: Instruction) {
         self.regs[ins.rd()] = self.hi;
     }
 
     fn op_mflo(&mut self, ins: Instruction) {
         self.regs[ins.rd()] = self.lo;
+    }
+
+    fn op_mthi(&mut self, ins: Instruction) {
+        self.hi = self.regs[ins.rs()];
+    }
+
+    fn op_mtlo(&mut self, ins: Instruction) {
+        self.lo = self.regs[ins.rs()];
     }
 
     fn op_div(&mut self, ins: Instruction) {
@@ -177,6 +207,10 @@ impl Cpu {
 
     fn op_or(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rs()] | self.regs[ins.rt()]);
+    }
+
+    fn op_nor(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), !(self.regs[ins.rs()] | self.regs[ins.rt()]));
     }
 
     fn op_slt(&mut self, ins: Instruction) {
@@ -264,12 +298,20 @@ impl Cpu {
         self.set_reg_delay(ins.rt(), bus.read_u8(self.regs[ins.rs()] + ins.imm_se()) as i32 as u32);
     }
 
+    fn op_lh(&mut self, ins: Instruction, bus: &mut Bus) {
+        self.set_reg_delay(ins.rt(), bus.read_u16(self.regs[ins.rs()] + ins.imm_se()) as i32 as u32);
+    }
+
     fn op_lw(&mut self, ins: Instruction, bus: &mut Bus) {
         self.set_reg_delay(ins.rt(), bus.read_u32(self.regs[ins.rs()] + ins.imm_se()));
     }
 
     fn op_lbu(&mut self, ins: Instruction, bus: &mut Bus) {
         self.set_reg_delay(ins.rt(), bus.read_u8(self.regs[ins.rs()] + ins.imm_se()) as u32);
+    }
+
+    fn op_lhu(&mut self, ins: Instruction, bus: &mut Bus) {
+        self.set_reg_delay(ins.rt(), bus.read_u16(self.regs[ins.rs()] + ins.imm_se()) as u32);
     }
 
     fn op_sb(&mut self, ins: Instruction, bus: &mut Bus) {
@@ -300,13 +342,10 @@ impl Cpu {
 
     fn cop0_op_rfe(&mut self) {
         let sr = self.cop0_regs[COP0_REG_SR];
-        let prev = (sr & COP0_SR_PREV_MASK) >> COP0_SR_PREV_SHIFT;
-        let old = (sr & COP0_SR_OLD_MASK) >> COP0_SR_OLD_SHIFT;
 
-        let mut new_sr = sr & !(COP0_SR_CUR_MASK | COP0_SR_PREV_MASK);
-        new_sr |= prev | (old << COP0_SR_PREV_SHIFT);
+        let mode = (sr >> 2) & 0x0F;
 
-        self.cop0_regs[COP0_REG_SR] = new_sr;
+        self.cop0_regs[COP0_REG_SR] = (sr & !0x0F) | mode;
     }
 
     fn set_reg(&mut self, i: usize, val: u32) {
@@ -319,8 +358,47 @@ impl Cpu {
         self.load_delay[0].data = val;
     }
 
-    fn exception(&mut self) {
+    fn exception(&mut self, exccode: u32) {
+        let mut sr = self.cop0_regs[COP0_REG_SR];
+        let mut cause = self.cop0_regs[COP0_REG_CAUSE];
+        let epc;
 
+        // Check if in a delay slot
+        if self.pc != self.pc_ins + 4 {
+            cause |= COP0_CAUSE_BD;
+            epc = self.pc_ins - 4;
+        } else {
+            cause &= !COP0_CAUSE_BD;
+            epc = self.pc_ins;
+        }
+
+        cause = (cause & !COP0_CAUSE_EXECCODE_MASK) | (exccode << COP0_CAUSE_EXECCODE_SHIFT);
+
+        let mode = sr & 0x3F;
+        sr = (sr & !0x3F) | ((mode << 2) & 0x3F);
+
+        let vector;
+        if (sr & COP0_SR_BEV) == 0 {
+            vector = EXCEPTION_VECTOR;
+        } else {
+            vector = EXCEPTION_VECTOR_ALT;
+        }
+
+        self.pc = vector;
+        self.branch_delay = vector + 4;
+
+        self.cop0_regs[COP0_REG_SR] = sr;
+        self.cop0_regs[COP0_REG_CAUSE] = cause;
+        self.cop0_regs[COP0_REG_EPC] = epc;
+    }
+
+    fn stdio_hook(&self) {
+        if (self.pc == 0xA0) || (self.pc == 0xB0) {
+            let func = self.regs[9];
+            if (func == 0x3C) || (func == 0x3D) {
+                print!("{}", self.regs[4] as u8 as char)
+            }
+        }
     }
 }
 

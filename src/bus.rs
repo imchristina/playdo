@@ -23,7 +23,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.read_u32(raw),
             BusTarget::Rom(offset) => self.rom.read_u32(offset),
-            BusTarget::Uart(raw) => self.uart_read_stub(raw),
+            BusTarget::Serial(raw) => self.serial_read_stub(raw),
             BusTarget::IoStub(raw) => self.io_read_stub(raw),
             BusTarget::CacheCtrl => self.cache_ctrl_read_stub(),
             BusTarget::Expansion => 0,
@@ -36,7 +36,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.read_u16(raw),
             BusTarget::Rom(offset) => self.rom.read_u16(offset),
-            BusTarget::Uart(raw) => self.uart_read_stub(raw) as u16,
+            BusTarget::Serial(raw) => self.serial_read_stub(raw) as u16,
             BusTarget::IoStub(raw) => self.io_read_stub(raw) as u16,
             BusTarget::CacheCtrl => self.cache_ctrl_read_stub() as u16,
             BusTarget::Expansion => 0,
@@ -48,7 +48,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.read_u8(raw),
             BusTarget::Rom(offset) => self.rom.read_u8(offset),
-            BusTarget::Uart(raw) => self.uart_read_stub(raw) as u8,
+            BusTarget::Serial(raw) => self.serial_read_stub(raw) as u8,
             BusTarget::IoStub(raw) => self.io_read_stub(raw) as u8,
             BusTarget::CacheCtrl => self.cache_ctrl_read_stub() as u8,
             BusTarget::Expansion => 0,
@@ -60,7 +60,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.write_u32(raw, data),
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
-            BusTarget::Uart(raw) => self.uart_write_stub(raw, data),
+            BusTarget::Serial(raw) => self.serial_write_stub(raw, data),
             BusTarget::IoStub(raw) => self.io_write_stub(raw, data),
             BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data),
             BusTarget::Expansion => {},
@@ -72,7 +72,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.write_u16(raw, data),
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
-            BusTarget::Uart(raw) => self.uart_write_stub(raw, data as u32),
+            BusTarget::Serial(raw) => self.serial_write_stub(raw, data as u32),
             BusTarget::IoStub(raw) => self.io_write_stub(raw, data as u32),
             BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data as u32),
             BusTarget::Expansion => {},
@@ -84,7 +84,7 @@ impl Bus {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.write_u8(raw, data),
             BusTarget::Rom(offset) => panic!("Invalid memory access! 0x{:X}", offset),
-            BusTarget::Uart(raw) => self.uart_write_stub(raw, data as u32),
+            BusTarget::Serial(raw) => self.serial_write_stub(raw, data as u32),
             BusTarget::IoStub(raw) => self.io_write_stub(raw, data as u32),
             BusTarget::CacheCtrl => self.cache_ctrl_write_stub(data as u32),
             BusTarget::Expansion => {},
@@ -92,31 +92,31 @@ impl Bus {
         }
     }
 
-    fn uart_read_stub(&self, addr: u32) -> u32 {
-        println!("Unhandled UART read: {:#X}", addr);
+    fn serial_read_stub(&self, addr: u32) -> u32 {
+        //println!("Unhandled serial read: {:#X}", addr);
         0
     }
 
-    fn uart_write_stub(&self, addr: u32, data: u32) {
-        println!("Unhandled UART write: {:#X}, {:#X}", addr, data);
+    fn serial_write_stub(&self, addr: u32, data: u32) {
+        //println!("Unhandled serial write: {:#X}, {:#X}", addr, data);
     }
 
     fn io_read_stub(&self, addr: u32) -> u32 {
-        println!("Unhandled MMIO read: {:#X}", addr);
+        //println!("Unhandled MMIO read: {:#X}", addr);
         0
     }
 
     fn io_write_stub(&self, addr: u32, data: u32) {
-        println!("Unhandled MMIO write: {:#X}, {:#X}", addr, data);
+        //println!("Unhandled MMIO write: {:#X}, {:#X}", addr, data);
     }
 
     fn cache_ctrl_read_stub(&self) -> u32 {
-        println!("Unhandled cache control read");
+        //println!("Unhandled cache control read");
         0
     }
 
     fn cache_ctrl_write_stub(&self, data: u32) {
-        println!("Unhandled cache control write: {:#X}", data);
+        //println!("Unhandled cache control write: {:#X}", data);
     }
 
     fn decode_address(&self, v_addr: u32) -> BusTarget {
@@ -132,7 +132,7 @@ impl Bus {
         } else if (addr >= ROM_ADDR) && (addr < ROM_ADDR + ROM_SIZE) {
             BusTarget::Rom(addr - ROM_ADDR)
         } else if (addr >= 0x1F802020) && (addr <= 0x1F80202F) {
-            BusTarget::Uart(addr)
+            BusTarget::Serial(addr)
         } else if (addr >= 0x1F801000) && (addr < 0x1F803FFF) {
             BusTarget::IoStub(addr)
         } else if addr == 0xFFFE0130 {
@@ -148,7 +148,7 @@ impl Bus {
 enum BusTarget {
     Ram(u32),
     Rom(u32),
-    Uart(u32),
+    Serial(u32),
     IoStub(u32),
     CacheCtrl,
     Expansion,
