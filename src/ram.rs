@@ -1,13 +1,13 @@
 pub const RAM_SIZE: u32 = 2 * 1024 * 1024;
 
 pub struct Ram {
-    data: [u8; RAM_SIZE as usize],
+    data: Box<[u8; RAM_SIZE as usize]>,
 }
 
 impl Ram {
     pub fn new() -> Self {
         return Self {
-            data: [0; RAM_SIZE as usize],
+            data: Box::new([0; RAM_SIZE as usize]),
         }
     }
 

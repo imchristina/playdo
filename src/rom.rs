@@ -1,7 +1,7 @@
 pub const ROM_SIZE: u32 = 512 * 1024;
 
 pub struct Rom {
-    data: [u8; ROM_SIZE as usize],
+    data: Box<[u8; ROM_SIZE as usize]>,
 }
 
 impl Rom {
@@ -10,9 +10,9 @@ impl Rom {
         use std::io::Read;
 
         let mut file = File::open(path)?;
-        let mut data = [0u8; ROM_SIZE as usize];
+        let mut data = Box::new([0u8; ROM_SIZE as usize]);
 
-        file.read_exact(&mut data)?;
+        file.read_exact(&mut *data)?;
 
         Ok(Self { data })
     }

@@ -24,16 +24,16 @@ const COP0_CAUSE_BD:             u32 = 1 << 31;
 const COP0_EXECCODE_SYSCALL: u32 = 8;
 
 pub struct Cpu {
-    regs: [u32; 32],
-    pc: u32,
-    hi: u32,
-    lo: u32,
+    pub regs: [u32; 32],
+    pub pc: u32,
+    pub hi: u32,
+    pub lo: u32,
 
-    branch_delay: u32, // Branch delay slot
-    load_delay: [RegWrite; 2], // Load delay slot, last member is oldest/to be commited
-    pc_ins: u32, // PC of the currently executing instruction, for exceptions
+    pub branch_delay: u32, // Branch delay slot
+    pub load_delay: [RegWrite; 2], // Load delay slot, last member is oldest/to be commited
+    pub pc_ins: u32, // PC of the currently executing instruction, for exceptions
 
-    cop0_regs: [u32; 32],
+    pub cop0_regs: [u32; 32],
 }
 
 impl Cpu {
