@@ -22,7 +22,7 @@ const COP0_CAUSE_EXECCODE_SHIFT:    u32 = 2;
 const COP0_CAUSE_EXECCODE_MASK:     u32 = 0b11111 << COP0_CAUSE_EXECCODE_SHIFT;
 const COP0_CAUSE_IP_SHIFT:          u32 = 8;
 const COP0_CAUSE_IP_MASK:           u32 = 0b11111111 << COP0_CAUSE_IP_SHIFT;
-const COP0_CAUSE_IP2:              u32 = 10;
+const COP0_CAUSE_IP2:              u32 = 1 << 10;
 const COP0_CAUSE_BD:                u32 = 1 << 31;
 
 const COP0_EXECCODE_INT:        u32 = 0;
@@ -67,7 +67,6 @@ impl Cpu {
             let sr = self.cop0_regs[COP0_REG_SR];
             if ((sr & COP0_SR_IEC) != 0) && ((sr & COP0_SR_IM2) != 0) {
                 self.exception(COP0_EXECCODE_INT);
-                println!("INT!");
             }
         }
 
@@ -164,11 +163,11 @@ impl Cpu {
     }
 
     fn op_sllv(&mut self, ins: Instruction) {
-        self.set_reg(ins.rd(), self.regs[ins.rt()] << self.regs[ins.rs()]);
+        self.set_reg(ins.rd(), self.regs[ins.rt()] << (self.regs[ins.rs()] & 0x1F));
     }
 
     fn op_srlv(&mut self, ins: Instruction) {
-        self.set_reg(ins.rd(), self.regs[ins.rt()] >> self.regs[ins.rs()]);
+        self.set_reg(ins.rd(), self.regs[ins.rt()] >> (self.regs[ins.rs()] & 0x1F));
     }
 
     fn op_jr(&mut self, ins: Instruction) {

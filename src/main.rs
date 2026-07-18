@@ -10,7 +10,7 @@ use cpu::Cpu;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default(),
+        viewport: egui::ViewportBuilder::default().with_maximized(true),
         ..Default::default()
     };
     eframe::run_native(
