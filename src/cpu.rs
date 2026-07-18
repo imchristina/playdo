@@ -14,14 +14,20 @@ const COP0_SR_IEP: u32 = 1 << 2;
 const COP0_SR_KUP: u32 = 1 << 3;
 const COP0_SR_IEO: u32 = 1 << 4;
 const COP0_SR_KUO: u32 = 1 << 5;
+const COP0_SR_IM2: u32 = 1 << 10;
 const COP0_SR_ISC: u32 = 1 << 16;
 const COP0_SR_BEV: u32 = 1 << 22;
 
-const COP0_CAUSE_EXECCODE_SHIFT: u32 = 2;
-const COP0_CAUSE_EXECCODE_MASK:  u32 = 0b11111 << COP0_CAUSE_EXECCODE_SHIFT;
-const COP0_CAUSE_BD:             u32 = 1 << 31;
+const COP0_CAUSE_EXECCODE_SHIFT:    u32 = 2;
+const COP0_CAUSE_EXECCODE_MASK:     u32 = 0b11111 << COP0_CAUSE_EXECCODE_SHIFT;
+const COP0_CAUSE_IP_SHIFT:          u32 = 8;
+const COP0_CAUSE_IP_MASK:           u32 = 0b11111111 << COP0_CAUSE_IP_SHIFT;
+const COP0_CAUSE_IP2:              u32 = 10;
+const COP0_CAUSE_BD:                u32 = 1 << 31;
 
-const COP0_EXECCODE_SYSCALL: u32 = 8;
+const COP0_EXECCODE_INT:        u32 = 0;
+const COP0_EXECCODE_SYSCALL:    u32 = 8;
+const COP0_EXECODE_OV:          u32 = 12;
 
 pub struct Cpu {
     pub regs: [u32; 32],
@@ -53,18 +59,26 @@ impl Cpu {
     }
 
     pub fn step(&mut self, bus: &mut Bus) {
-        let ins = Instruction(bus.read_u32(self.pc));
+        // Interrupts
+        self.cop0_regs[COP0_REG_CAUSE] &= !COP0_CAUSE_IP2;
+        if (bus.interrupt.i_stat & bus.interrupt.i_mask) != 0 {
+            self.cop0_regs[COP0_REG_CAUSE] |= COP0_CAUSE_IP2;
 
-        //let pc_debug = self.pc; // Store PC before delay slot is active
+            let sr = self.cop0_regs[COP0_REG_SR];
+            if ((sr & COP0_SR_IEC) != 0) && ((sr & COP0_SR_IM2) != 0) {
+                self.exception(COP0_EXECCODE_INT);
+                println!("INT!");
+            }
+        }
+
+        let ins = Instruction(bus.read_u32(self.pc));
 
         self.execute(ins, bus);
 
-        //println!("OP: {}, PC: {:#X}, Regs:{:X?} HI: {:#X}, LO: {:#X}", ins.op(), pc_debug, self.regs, self.hi, self.lo);
+        self.stdio_hook();
     }
 
     pub fn execute(&mut self, ins: Instruction, bus: &mut Bus) {
-        self.stdio_hook();
-
         self.pc_ins = self.pc;
         self.pc = self.branch_delay;
         self.branch_delay = self.pc + 4; // Default, branching instructions will overwrite
@@ -95,6 +109,7 @@ impl Cpu {
                 35 => self.op_subu(ins),
                 36 => self.op_and(ins),
                 37 => self.op_or(ins),
+                38 => self.op_xor(ins),
                 39 => self.op_nor(ins),
                 42 => self.op_slt(ins),
                 43 => self.op_sltu(ins),
@@ -195,16 +210,24 @@ impl Cpu {
         self.hi = self.regs[ins.rs()] % self.regs[ins.rt()];
     }
 
-    fn op_add(&mut self, ins: Instruction) { // TODO overflow trap
-        self.set_reg(ins.rd(), self.regs[ins.rs()] + self.regs[ins.rt()]);
+    fn op_add(&mut self, ins: Instruction) {
+        let result = i32::checked_add(self.regs[ins.rs()] as i32, self.regs[ins.rt()] as i32);
+        match result {
+            Some(value) => self.set_reg(ins.rd(), value as u32),
+            None => self.exception(COP0_EXECODE_OV),
+        }
     }
 
     fn op_addu(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rs()] + self.regs[ins.rt()]);
     }
 
-    fn op_sub(&mut self, ins: Instruction) { // TODO overflow trap
-        self.set_reg(ins.rd(), self.regs[ins.rs()] - self.regs[ins.rt()]);
+    fn op_sub(&mut self, ins: Instruction) {
+        let result = i32::checked_sub(self.regs[ins.rs()] as i32, self.regs[ins.rt()] as i32);
+        match result {
+            Some(value) => self.set_reg(ins.rd(), value as u32),
+            None => self.exception(COP0_EXECODE_OV),
+        }
     }
 
     fn op_subu(&mut self, ins: Instruction) {
@@ -217,6 +240,10 @@ impl Cpu {
 
     fn op_or(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rs()] | self.regs[ins.rt()]);
+    }
+
+    fn op_xor(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), self.regs[ins.rs()] ^ self.regs[ins.rt()]);
     }
 
     fn op_nor(&mut self, ins: Instruction) {
@@ -276,8 +303,12 @@ impl Cpu {
         }
     }
 
-    fn op_addi(&mut self, ins: Instruction) { // TODO overflow trap
-        self.set_reg(ins.rt(), ins.imm_se() + self.regs[ins.rs()]);
+    fn op_addi(&mut self, ins: Instruction) {
+        let result = i32::checked_add(ins.imm_se() as i32, self.regs[ins.rs()] as i32);
+        match result {
+            Some(value) => self.set_reg(ins.rt(), value as u32),
+            None => self.exception(COP0_EXECODE_OV),
+        }
     }
 
     fn op_addiu(&mut self, ins: Instruction) {
@@ -289,7 +320,7 @@ impl Cpu {
     }
 
     fn op_sltiu(&mut self, ins: Instruction) {
-        self.set_reg(ins.rt(), (self.regs[ins.rs()] < ins.imm_u32()) as u32);
+        self.set_reg(ins.rt(), (self.regs[ins.rs()] < ins.imm_se()) as u32);
     }
 
     fn op_andi(&mut self, ins: Instruction) {

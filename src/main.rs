@@ -2,6 +2,8 @@ mod bus;
 mod cpu;
 mod ram;
 mod rom;
+mod interrupt;
+mod gpu;
 
 use bus::Bus;
 use cpu::Cpu;
@@ -41,22 +43,24 @@ impl Default for DebuggerApp {
 impl eframe::App for DebuggerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if self.running {
-            for _ in 0..10000 {
+            for _ in 0..100000 {
                 self.cpu.step(&mut self.bus);
             }
         }
         ui.ctx().request_repaint();
 
-        self.cpu_window(ui);
-        self.cop0_window(ui);
+        self.cpu_panel(ui);
     }
 }
 
 impl DebuggerApp {
-    fn cpu_window(&mut self, ui: &mut egui::Ui) {
-        egui::Window::new("CPU").show(ui, |ui| {
+    fn cpu_panel(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::left("cpu").show(ui, |ui| {
+            ui.separator();
+            ui.heading("CPU");
+            ui.separator();
             ui.horizontal(|ui| {
-                ui.monospace(format!("PC '{:#X}'", self.cpu.pc));
+                ui.monospace(format!("PC: {:08X}", self.cpu.pc));
 
                 if ui.button("Step").clicked() {
                     self.running = false;
@@ -74,6 +78,23 @@ impl DebuggerApp {
                 }
             });
 
+            egui::Grid::new("cpu_ins").striped(true).num_columns(1).show(ui, |ui| {
+                for i in -4..5 {
+                    let pc = (i + (self.cpu.pc as i64)) as u32;
+                    let data = self.bus.read_u32_debug(pc);
+                    let line = format!("{:08X}: {:08X}", pc, data);
+                    if pc != self.cpu.pc {
+                        ui.monospace(line);
+                    } else {
+                        ui.monospace(line).highlight();
+                    }
+                    ui.end_row();
+                }
+            });
+
+            ui.separator();
+            ui.heading("Registers");
+            ui.separator();
             egui::Grid::new("cpu_regs").striped(true).num_columns(4).show(ui, |ui| {
                 for (i, reg) in self.cpu.regs.iter().enumerate() {
                     ui.monospace(format!("{:>2}: {:08X}", i, reg));
@@ -82,17 +103,22 @@ impl DebuggerApp {
                 ui.monospace(format!("HI: {:08X}", self.cpu.hi));
                 ui.monospace(format!("LO: {:08X}", self.cpu.lo));
             });
-        });
-    }
 
-    fn cop0_window(&mut self, ui: &mut egui::Ui) {
-        egui::Window::new("COP0").show(ui, |ui| {
+            ui.separator();
+            ui.heading("COP0");
+            ui.separator();
             egui::Grid::new("cop0_regs").striped(true).num_columns(4).show(ui, |ui| {
                 for (i, reg) in self.cpu.cop0_regs.iter().enumerate() {
                     ui.monospace(format!("{:>2}: {:08X}", i, reg));
                     if (i + 1) % 4 == 0 { ui.end_row(); }
                 }
             });
+
+            ui.separator();
+            ui.heading("Interrupt");
+            ui.separator();
+            ui.monospace(format!("I_STAT: {:032b}", self.bus.interrupt.i_stat));
+            ui.monospace(format!("I_MASK: {:032b}", self.bus.interrupt.i_mask));
         });
     }
 }
