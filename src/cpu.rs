@@ -27,7 +27,7 @@ const COP0_CAUSE_BD:                u32 = 1 << 31;
 
 const COP0_EXECCODE_INT:        u32 = 0;
 const COP0_EXECCODE_SYSCALL:    u32 = 8;
-const COP0_EXECODE_OV:          u32 = 12;
+const COP0_EXECCODE_OV:          u32 = 12;
 
 pub struct Cpu {
     pub regs: [u32; 32],
@@ -213,7 +213,7 @@ impl Cpu {
         let result = i32::checked_add(self.regs[ins.rs()] as i32, self.regs[ins.rt()] as i32);
         match result {
             Some(value) => self.set_reg(ins.rd(), value as u32),
-            None => self.exception(COP0_EXECODE_OV),
+            None => self.exception(COP0_EXECCODE_OV),
         }
     }
 
@@ -225,7 +225,7 @@ impl Cpu {
         let result = i32::checked_sub(self.regs[ins.rs()] as i32, self.regs[ins.rt()] as i32);
         match result {
             Some(value) => self.set_reg(ins.rd(), value as u32),
-            None => self.exception(COP0_EXECODE_OV),
+            None => self.exception(COP0_EXECCODE_OV),
         }
     }
 
@@ -306,7 +306,7 @@ impl Cpu {
         let result = i32::checked_add(ins.imm_se() as i32, self.regs[ins.rs()] as i32);
         match result {
             Some(value) => self.set_reg(ins.rt(), value as u32),
-            None => self.exception(COP0_EXECODE_OV),
+            None => self.exception(COP0_EXECCODE_OV),
         }
     }
 
@@ -323,15 +323,15 @@ impl Cpu {
     }
 
     fn op_andi(&mut self, ins: Instruction) {
-        self.set_reg(ins.rt(), self.regs[ins.rs()] & ins.imm_u32());
+        self.set_reg(ins.rt(), self.regs[ins.rs()] & ins.imm());
     }
 
     fn op_ori(&mut self, ins: Instruction) {
-        self.set_reg(ins.rt(), self.regs[ins.rs()] | ins.imm_u32());
+        self.set_reg(ins.rt(), self.regs[ins.rs()] | ins.imm());
     }
 
     fn op_lui(&mut self, ins: Instruction) {
-        self.set_reg(ins.rt(), (ins.imm_u32()) << 16);
+        self.set_reg(ins.rt(), (ins.imm()) << 16);
     }
 
     fn op_lb(&mut self, ins: Instruction, bus: &mut Bus) {
@@ -464,17 +464,14 @@ impl Instruction {
     fn funct(&self) -> u8 {
         (self.0 & 0x3F) as u8
     }
-    fn imm(&self) -> u16 {
-        (self.0 & 0xFFFF) as u16
-    }
-    fn imm_u32(&self) -> u32 {
-        (self.0 & 0xFFFF)
+    fn imm(&self) -> u32 {
+        self.0 & 0xFFFF
     }
     fn imm_se(&self) -> u32 {
         (self.0 & 0xFFFF) as i16 as i32 as u32
     }
     fn target(&self) -> u32 {
-        (self.0 & 0x3ffffff)
+        self.0 & 0x3ffffff
     }
 }
 
