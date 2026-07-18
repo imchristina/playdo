@@ -45,6 +45,7 @@ impl eframe::App for DebuggerApp {
         if self.running {
             for _ in 0..100000 {
                 self.cpu.step(&mut self.bus);
+                self.bus.step();
             }
         }
         ui.ctx().request_repaint();
@@ -65,6 +66,7 @@ impl DebuggerApp {
                 if ui.button("Step").clicked() {
                     self.running = false;
                     self.cpu.step(&mut self.bus);
+                    self.bus.step();
                 }
 
                 if self.running {

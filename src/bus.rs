@@ -25,6 +25,10 @@ impl Bus {
         }
     }
 
+    pub fn step(&mut self) {
+        self.gpu.step(&mut self.interrupt);
+    }
+
     pub fn read_u32(&self, addr: u32) -> u32 {
         match self.decode_address(addr) {
             BusTarget::Ram(raw) => self.ram.read_u32(raw),
