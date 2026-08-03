@@ -12,7 +12,7 @@ pub struct Bus {
     ram: Ram,
     rom: Rom,
     pub interrupt: Interrupt,
-    gpu: Gpu,
+    pub gpu: Gpu,
 }
 
 impl Bus {

@@ -51,6 +51,8 @@ impl eframe::App for DebuggerApp {
         ui.ctx().request_repaint();
 
         self.cpu_panel(ui);
+
+        self.gpu_panel(ui);
     }
 }
 
@@ -121,6 +123,18 @@ impl DebuggerApp {
             ui.separator();
             ui.monospace(format!("I_STAT: {:032b}", self.bus.interrupt.i_stat));
             ui.monospace(format!("I_MASK: {:032b}", self.bus.interrupt.i_mask));
+        });
+    }
+
+    fn gpu_panel(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::left("gpu").show(ui, |ui| {
+            ui.separator();
+            ui.heading("GPU");
+            ui.separator();
+
+            ui.monospace(format!("GPUSTAT: {:032b}", self.bus.gpu.gpustat()));
+            ui.monospace(format!("Texture page X base: {:032b}", self.bus.gpu.texture_page_x_base));
+            ui.monospace(format!("Texture page Y base: {:032b}", self.bus.gpu.texture_page_y_base));
         });
     }
 }

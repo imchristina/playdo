@@ -23,6 +23,8 @@ pub struct Gpu {
     pub cpu_read_ready: bool,
     pub dma_ready: bool,
     pub interlace_even_odd: bool,
+    pub textured_rectangle_x_flip: bool,
+    pub textured_rectangle_y_flip: bool,
 }
 
 impl Gpu {
@@ -39,7 +41,7 @@ impl Gpu {
         0
     }
 
-    fn gpustat(&self) -> u32 {
+    pub fn gpustat(&self) -> u32 {
         let mut gpustat = 0;
 
         let bit25 = match self.dma {
@@ -81,10 +83,23 @@ impl Gpu {
     fn gp0(&mut self, gp0: Gp0) {
         match gp0.command() {
             7 => match gp0.environment() {
+                0xE1 => self.gp0_drawmode(gp0),
                 _ => panic!("Unknown GP0 environment! Environment: {:#X}, Raw: {:#X}", gp0.environment(), gp0.0)
             }
             _ => panic!("Unknown GP0 command! Command: {}, Raw: {:#X}", gp0.command(), gp0.0)
         }
+    }
+
+    fn gp0_drawmode(&mut self, gp0: Gp0) {
+        self.texture_page_x_base = gp0.0 & 0b1111;
+        self.texture_page_y_base = gp0.0 >> 4;
+        self.semi_transparency = (gp0.0 >> 5) & 0b11;
+        self.texture_page_colors = (gp0.0 >> 7) & 0b11;
+        self.dither = (gp0.0 >> 9) != 0;
+        self.drawing = (gp0.0 >> 10) != 0;
+        // Bit 11 texture page Y base 2, unused on retail hardware
+        self.textured_rectangle_x_flip = (gp0.0 >> 12) != 0;
+        self.textured_rectangle_y_flip = (gp0.0 >> 13) != 0;
     }
 
     fn gp1(&mut self, data: u32) {

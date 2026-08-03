@@ -93,13 +93,16 @@ impl Cpu {
                 03 => self.op_sra(ins),
                 04 => self.op_sllv(ins),
                 06 => self.op_srlv(ins),
+                07 => self.op_srav(ins),
                 08 => self.op_jr(ins),
                 09 => self.op_jalr(ins),
                 12 => self.op_syscall(),
                 16 => self.op_mfhi(ins),
-                18 => self.op_mflo(ins),
                 17 => self.op_mthi(ins),
+                18 => self.op_mflo(ins),
                 19 => self.op_mtlo(ins),
+                //24 => self.op_mult(ins),
+                //25 => self.op_multu(ins),
                 26 => self.op_div(ins),
                 27 => self.op_divu(ins),
                 32 => self.op_add(ins),
@@ -168,6 +171,10 @@ impl Cpu {
 
     fn op_srlv(&mut self, ins: Instruction) {
         self.set_reg(ins.rd(), self.regs[ins.rt()] >> (self.regs[ins.rs()] & 0x1F));
+    }
+
+    fn op_srav(&mut self, ins: Instruction) {
+        self.set_reg(ins.rd(), ((self.regs[ins.rt()] as i32) >> (self.regs[ins.rs()] & 0x1F)) as u32);
     }
 
     fn op_jr(&mut self, ins: Instruction) {
