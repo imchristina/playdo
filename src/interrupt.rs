@@ -34,8 +34,8 @@ impl Interrupt {
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
         match address {
-            Self::I_STAT_ADDR => self.i_stat = data,
-            Self::I_MASK_ADDR => self.i_mask = data,
+            Self::I_STAT_ADDR => self.i_stat &= data,
+            Self::I_MASK_ADDR => self.i_mask &= data,
             _ => panic!("Invalid interrupt address! {:#X}", address),
         }
     }

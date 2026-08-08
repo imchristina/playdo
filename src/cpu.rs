@@ -102,7 +102,7 @@ impl Cpu {
                 18 => self.op_mflo(ins),
                 19 => self.op_mtlo(ins),
                 //24 => self.op_mult(ins),
-                //25 => self.op_multu(ins),
+                25 => self.op_multu(ins),
                 26 => self.op_div(ins),
                 27 => self.op_divu(ins),
                 32 => self.op_add(ins),
@@ -191,11 +191,11 @@ impl Cpu {
     }
 
     fn op_mfhi(&mut self, ins: Instruction) {
-        self.regs[ins.rd()] = self.hi;
+        self.set_reg(ins.rd(), self.hi);
     }
 
     fn op_mflo(&mut self, ins: Instruction) {
-        self.regs[ins.rd()] = self.lo;
+        self.set_reg(ins.rd(), self.lo);
     }
 
     fn op_mthi(&mut self, ins: Instruction) {
@@ -204,6 +204,13 @@ impl Cpu {
 
     fn op_mtlo(&mut self, ins: Instruction) {
         self.lo = self.regs[ins.rs()];
+    }
+
+    fn op_multu(&mut self, ins: Instruction) {
+        let result = self.regs[ins.rs()] as u64 * self.regs[ins.rt()] as u64;
+
+        self.lo = result as u32;
+        self.hi = (result >> 32) as u32;
     }
 
     fn op_div(&mut self, ins: Instruction) {
@@ -342,11 +349,11 @@ impl Cpu {
     }
 
     fn op_lb(&mut self, ins: Instruction, bus: &mut Bus) {
-        self.set_reg_delay(ins.rt(), bus.read_u8(self.regs[ins.rs()] + ins.imm_se()) as i32 as u32);
+        self.set_reg_delay(ins.rt(), bus.read_u8(self.regs[ins.rs()] + ins.imm_se()) as i8 as u32);
     }
 
     fn op_lh(&mut self, ins: Instruction, bus: &mut Bus) {
-        self.set_reg_delay(ins.rt(), bus.read_u16(self.regs[ins.rs()] + ins.imm_se()) as i32 as u32);
+        self.set_reg_delay(ins.rt(), bus.read_u16(self.regs[ins.rs()] + ins.imm_se()) as i16 as u32);
     }
 
     fn op_lw(&mut self, ins: Instruction, bus: &mut Bus) {

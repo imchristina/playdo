@@ -34,11 +34,15 @@ impl Gpu {
     pub fn new() -> Self {
         let mut out = Self::default();
         out.display_disable = true;
+
+        out.cmd_ready = true;
+        out.cpu_read_ready = true;
+        out.dma_ready = true;
         return out
     }
 
     fn gpuread(&self) -> u32 {
-        0
+        panic!("GPUREAD");
     }
 
     pub fn gpustat(&self) -> u32 {
@@ -82,6 +86,7 @@ impl Gpu {
 
     fn gp0(&mut self, gp0: Gp0) {
         match gp0.command() {
+            0 => (), // NOP
             7 => match gp0.environment() {
                 0xE1 => self.gp0_drawmode(gp0),
                 _ => panic!("Unknown GP0 environment! Environment: {:#X}, Raw: {:#X}", gp0.environment(), gp0.0)
@@ -92,7 +97,7 @@ impl Gpu {
 
     fn gp0_drawmode(&mut self, gp0: Gp0) {
         self.texture_page_x_base = gp0.0 & 0b1111;
-        self.texture_page_y_base = gp0.0 >> 4;
+        self.texture_page_y_base = (gp0.0 >> 4) & 0b1;
         self.semi_transparency = (gp0.0 >> 5) & 0b11;
         self.texture_page_colors = (gp0.0 >> 7) & 0b11;
         self.dither = (gp0.0 >> 9) != 0;
@@ -103,7 +108,7 @@ impl Gpu {
     }
 
     fn gp1(&mut self, data: u32) {
-
+        panic!("GP1!");
     }
 
     pub fn step(&mut self, interrupt: &mut Interrupt) {
