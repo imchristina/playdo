@@ -84,31 +84,35 @@ impl Gpu {
         return gpustat
     }
 
-    fn gp0(&mut self, gp0: Gp0) {
-        match gp0.command() {
-            0 => (), // NOP
-            7 => match gp0.environment() {
-                0xE1 => self.gp0_drawmode(gp0),
-                _ => panic!("Unknown GP0 environment! Environment: {:#X}, Raw: {:#X}", gp0.environment(), gp0.0)
-            }
-            _ => panic!("Unknown GP0 command! Command: {}, Raw: {:#X}", gp0.command(), gp0.0)
+    fn gp0(&mut self, ins: Instruction) {
+        match ins.opcode() {
+            0x00 => (), // NOP
+            0xE1 => self.gp0_drawmode(ins),
+            _ => panic!("Unknown GP0 instruction! Opcode: {}, Raw: {:#X}", ins.opcode(), ins.0)
         }
     }
 
-    fn gp0_drawmode(&mut self, gp0: Gp0) {
-        self.texture_page_x_base = gp0.0 & 0b1111;
-        self.texture_page_y_base = (gp0.0 >> 4) & 0b1;
-        self.semi_transparency = (gp0.0 >> 5) & 0b11;
-        self.texture_page_colors = (gp0.0 >> 7) & 0b11;
-        self.dither = (gp0.0 >> 9) != 0;
-        self.drawing = (gp0.0 >> 10) != 0;
+    fn gp0_drawmode(&mut self, ins: Instruction) {
+        self.texture_page_x_base = ins.0 & 0b1111;
+        self.texture_page_y_base = (ins.0 >> 4) & 0b1;
+        self.semi_transparency = (ins.0 >> 5) & 0b11;
+        self.texture_page_colors = (ins.0 >> 7) & 0b11;
+        self.dither = (ins.0 >> 9) != 0;
+        self.drawing = (ins.0 >> 10) != 0;
         // Bit 11 texture page Y base 2, unused on retail hardware
-        self.textured_rectangle_x_flip = (gp0.0 >> 12) != 0;
-        self.textured_rectangle_y_flip = (gp0.0 >> 13) != 0;
+        self.textured_rectangle_x_flip = (ins.0 >> 12) != 0;
+        self.textured_rectangle_y_flip = (ins.0 >> 13) != 0;
     }
 
-    fn gp1(&mut self, data: u32) {
-        panic!("GP1!");
+    fn gp1(&mut self, ins: Instruction) {
+        match ins.opcode() {
+            0x00 => self.gp1_reset(),
+            _ => panic!("Unknown GP1 instruction! Opcode: {}, Raw: {:#X}", ins.opcode(), ins.0)
+        }
+    }
+
+    fn gp1_reset(&mut self) {
+
     }
 
     pub fn step(&mut self, interrupt: &mut Interrupt) {
@@ -125,21 +129,18 @@ impl Gpu {
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
         match address {
-            Self::GP0_ADDR => self.gp0(Gp0(data)),
-            Self::GP1_ADDR => self.gp1(data),
+            Self::GP0_ADDR => self.gp0(Instruction(data)),
+            Self::GP1_ADDR => self.gp1(Instruction(data)),
             _ => panic!("Invalid GPU address! {:#X}", address),
         }
     }
 }
 
-struct Gp0(u32);
+struct Instruction(u32);
 
-impl Gp0 {
-    fn command(&self) -> u32 {
-        self.0 >> 29
-    }
-
-    fn environment(&self) -> u32 {
+impl Instruction {
+    fn opcode(&self) -> u32 {
         self.0 >> 24
     }
 }
+
